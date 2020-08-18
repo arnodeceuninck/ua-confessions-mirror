@@ -1,6 +1,6 @@
 from selenium import webdriver
 from config import TOKEN, PAGE_ID
-import time
+import sys
 import facebook
 import pickle
 
@@ -19,7 +19,11 @@ opts.headless = True
 driver = webdriver.Firefox(options=opts)
 
 # Load the page
-driver.get(url.format(nr=confession_nr))
+rvalue = driver.get(url.format(nr=confession_nr))
+
+if driver.title == "404 Not Found":
+    print("[{nr}] Page Not Found".format(nr=confession_nr))
+    sys.exit()
 
 # Get the confession from the page
 element = driver.find_element_by_tag_name('p')  # The confession is the only paragraph on the page
