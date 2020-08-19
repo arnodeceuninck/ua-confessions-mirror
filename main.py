@@ -5,8 +5,10 @@ import facebook
 import pickle
 from datetime import datetime
 
+
 class NotFoundError(Exception):
     super.__init__()
+
 
 def set_confession_nr(nr):
     pickle.dump(nr, open("var.pickle", "wb"))
@@ -53,6 +55,8 @@ def post_to_facebook(confession, confession_nr):
         against_community = "Your content couldn't be shared, because this link goes against our Community Standards"
         if against_community in error.message:
             # Feauture idea: Censor the part against the community standards and publish anyway
+            # confession = censor(confession, error.message)
+            # post_to_facebook(confession, confession_nr)
             pass
 
         # Write away the error
@@ -83,6 +87,8 @@ def main():
             # There are still confessions, try to find the next one
             incr_confession_nr()
             main()
+        # If there is still a not found beyond the last_known_confession, it must be the end of the confessions,
+        #  so try again later if there are any new confessions
 
 
 if __name__ == "__main__":
