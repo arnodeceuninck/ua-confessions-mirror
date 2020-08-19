@@ -23,6 +23,8 @@ rvalue = driver.get(url.format(nr=confession_nr))
 
 if driver.title == "404 Not Found":
     print("[{nr}] Page Not Found".format(nr=confession_nr))
+    if confession_nr == 13918:
+        confession_nr = 13948 # Een reeks opeenvolgende confessions met een 404 for some reason, sla deze over
     if confession_nr < 14098:
         confession_nr += 1 # There is a gap in the page numbers, so this goes anyway to the next one
     pickle.dump(confession_nr, open("var.pickle", "wb"))
