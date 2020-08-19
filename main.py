@@ -23,6 +23,9 @@ rvalue = driver.get(url.format(nr=confession_nr))
 
 if driver.title == "404 Not Found":
     print("[{nr}] Page Not Found".format(nr=confession_nr))
+    if confession_nr < 14098:
+        confession_nr += 1 # There is a gap in the page numbers, so this goes anyway to the next one
+    pickle.dump(confession_nr, open("var.pickle", "wb"))
     sys.exit()
 
 # Get the confession from the page
@@ -47,7 +50,8 @@ except facebook.GraphAPIError as error:
     file_object.write('{error} [{nr}] {text}\n'.format(nr=confession_nr, text=confession, error=error.code))
     file_object.close()
 
-    print(error.message)
+    print('[{nr}] {txt}'.format(nr=confession_nr, txt=error.message))
+    confession_nr += 1
 
 # Save the confession number and come back later
 pickle.dump(confession_nr, open("var.pickle", "wb"))
