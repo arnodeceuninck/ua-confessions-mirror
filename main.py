@@ -7,6 +7,17 @@ from datetime import datetime
 import time
 from cookies import load_cookie
 
+import subprocess
+
+def sendmessage(title, message):
+    subprocess.Popen(['notify-send', title, message])
+    return
+
+    # problem with dbus
+    # import notify2
+    # notify2.init('ua-confession-mirror')
+    # n = notify2.Notification('New post #{nr}', 'We found a post that hasn\'t been reviewed yet, please do so ASAP.')
+    # n.show()
 
 class NotFoundError(Exception):
     def __str__(self):
@@ -33,6 +44,7 @@ def get_confession_nr():
         while not accepted_dict[confession_nr]:
             confession_nr += 1  # Get the first accepted
     except:
+        sendmessage(('New post #{nr}', 'We found a post that hasn\'t been reviewed yet, please do so ASAP.'))
         raise Exception(
             "Already went through all reviewed items")  # todo: check if exception exists, if so send a notification
 
@@ -148,7 +160,9 @@ def main():
         # If there is still a not found beyond the last_known_confession, it must be the end of the confessions,
         #  so try again later if there are any new confessions
     except Exception as e:
-        print("{time} [{nr}] An error occured".format(nr=confession_nr, time=str(datetime.now())))
+        message = "{time} [{nr}] An error occured".format(nr=confession_nr, time=str(datetime.now()))
+        print(message)
+        sendmessage(message)
         raise e
 
 if __name__ == "__main__":
