@@ -15,7 +15,7 @@ def set_status(nr, accepted):
     accepted_dict[nr] = accepted
     pickle.dump(accepted_dict, open("accepted.pickle", "wb"))
     next_review += 1
-    pickle.dump(accepted, open("next_review.pickle", "wb"))
+    pickle.dump(next_review, open("next_review.pickle", "wb"))
 
 
 @app.route('/')
