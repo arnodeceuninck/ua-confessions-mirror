@@ -9,8 +9,12 @@ from cookies import load_cookie
 
 import subprocess
 
+MAX_ATTEMPTS = 10
+
 def sendmessage(title, message):
+    # print("Sending notification...")
     subprocess.Popen(['notify-send', title, message])
+    # print("Done")
     return
 
     # problem with dbus
@@ -19,13 +23,67 @@ def sendmessage(title, message):
     # n = notify2.Notification('New post #{nr}', 'We found a post that hasn\'t been reviewed yet, please do so ASAP.')
     # n.show()
 
+
 class NotFoundError(Exception):
     def __str__(self):
         return "Page not found"
 
 
+class NoConfessionError(Exception):
+    def __str__(self):
+        return "No more accepted confessions, check your notifications to know whether there are still confessions to be reviewed"
+
+class ConfessionNotReviewedError(Exception):
+    def __str__(self):
+        return "There are still confessions you should review!"
+
+class MaxAttemptsReached(Exception):
+    def __str__(self):
+        return "The maximum number of attempts for getting the confession has been reached"
+
 def set_confession_nr(nr):
     pickle.dump(nr, open("var.pickle", "wb"))
+
+
+def get_page_driver(confession_nr):
+    url = "https://student-confessions.herokuapp.com/confession/{nr}"
+
+    # Selenium configuration
+    opts = webdriver.FirefoxOptions()
+    opts.headless = True
+    driver = webdriver.Firefox(options=opts)
+
+    # Load the page
+    rvalue = driver.get(url.format(nr=confession_nr))
+
+    if driver.title == "404 Not Found":
+        raise NotFoundError()
+
+    return driver
+
+
+def get_confession(confession_nr):
+    driver = get_page_driver(confession_nr)
+    # Get the confession from the page
+    element = driver.find_element_by_tag_name('p')  # The confession is the only paragraph on the page
+    confession = element.text
+    return confession
+
+
+def check_confessions_after(nr, range=51, jump_size=10):
+    confession_after = True
+    try:
+        get_page_driver(nr)
+    except NotFoundError:
+        confession_after = False
+    if confession_after:
+        return True
+
+    if range > jump_size:
+        range = range - jump_size
+        nr = nr + jump_size
+        return check_confessions_after(nr, range, jump_size)
+    pass
 
 
 def get_confession_nr():
@@ -43,33 +101,17 @@ def get_confession_nr():
     try:
         while not accepted_dict[confession_nr]:
             confession_nr += 1  # Get the first accepted
-    except:
-        sendmessage(('New post #{nr}', 'We found a post that hasn\'t been reviewed yet, please do so ASAP.'))
-        raise Exception(
-            "Already went through all reviewed items")  # todo: check if exception exists, if so send a notification
+    except KeyError:
+        # No more accepted confessions found, check whether there are no confessions anymore
+        #  (because there can still be confessions that aren't reviewed yet)
+        if check_confessions_after(confession_nr):
+            sendmessage('New post after #{nr}'.format(nr=confession_nr), 'We found a post that hasn\'t been reviewed yet, please do so ASAP.')
+            print("{time} Warning: found new post, you should've received a notification about this".format(time=str(datetime.now())))
+            raise ConfessionNotReviewedError()
+        raise NoConfessionError()
 
     set_confession_nr(confession_nr)
     return confession_nr
-
-
-def get_confession(confession_nr):
-    url = "https://student-confessions.herokuapp.com/confession/{nr}"
-
-    # Selenium configuration
-    opts = webdriver.FirefoxOptions()
-    opts.headless = True
-    driver = webdriver.Firefox(options=opts)
-
-    # Load the page
-    rvalue = driver.get(url.format(nr=confession_nr))
-
-    if driver.title == "404 Not Found":
-        raise NotFoundError()
-
-    # Get the confession from the page
-    element = driver.find_element_by_tag_name('p')  # The confession is the only paragraph on the page
-    confession = element.text
-    return confession
 
 
 def post_to_facebook(confession, confession_nr):
@@ -80,41 +122,31 @@ def post_to_facebook(confession, confession_nr):
 
 
 def facebook_post_selenium(message):
-    from selenium import webdriver
-    from selenium.webdriver.common.keys import Keys
-    from time import sleep
-    from selenium.common.exceptions import TimeoutException
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support.ui import Select
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support import expected_conditions
-    from selenium.common.exceptions import NoSuchElementException
-
     opts = webdriver.FirefoxOptions()
     opts.headless = True
     driver = webdriver.Firefox(options=opts)
     driver.get('https://mbasic.facebook.com/')
     load_cookie(driver, 'cookie.pickle')
     driver.get('https://mbasic.facebook.com/UAntwerpen-Confessions-Mirror-114029007083594/')
-    print("Page loaded...")
+    # print("Page loaded...")
     post_box = driver.find_element_by_id("u_0_0")
     # post_box = driver.find_element_by_xpath('//textarea[@placeholder="What\'s on your mind?"')
     post_box.click()
-    print("Clicked on post textbox...")
+    # print("Clicked on post textbox...")
     time.sleep(3)
     post_box.send_keys(message)
-    sleep(2)
+    time.sleep(2)
     post_it = driver.find_element_by_name("view_post")
     # post_it = driver.find_element_by_xpath("//input[@value=\"Post\"")
     post_it.click()
-    print("Posted...")
+    # print("Posted...")
 
 
 def facebook_post_graph_api(message):
     try:
         graph = facebook.GraphAPI(TOKEN)
         graph.put_object(PAGE_ID, "feed", message=message)
-        print("{time} Confession {nr} posted successfully".format(nr=confession_nr, time=str(datetime.now())))
+
 
     except facebook.GraphAPIError as error:
         against_community = "Your content couldn't be shared, because this link goes against our Community Standards"
@@ -145,25 +177,36 @@ def main():
     try:
         confession_nr = get_confession_nr()
         confession = get_confession(confession_nr)
-        print(confession)
         post_to_facebook(confession, confession_nr)
         incr_confession_nr()
+        print("{time} Confession {nr} posted successfully".format(nr=confession_nr, time=str(datetime.now())))
     except NotFoundError:
         print("{time} [{nr}] Page Not Found".format(nr=confession_nr, time=str(datetime.now())))
-        main()  # All accepted confessions should exist
-        return
-        last_known_confession = 14098
-        if confession_nr < last_known_confession:
-            # There are still confessions, try to find the next one
-            incr_confession_nr()
-            main()
+        global MAX_ATTEMPTS
+        if MAX_ATTEMPTS:
+            MAX_ATTEMPTS -= 1
+            main()  # All accepted confessions should exist
+        else:
+            sendmessage("Max attempts reached", "Max attempts reached for confession #{nr}".format(nr=confession_nr))
+            raise MaxAttemptsReached()
+        # return
+        # last_known_confession = 14098
+        # if confession_nr < last_known_confession:
+        #     # There are still confessions, try to find the next one
+        #     incr_confession_nr()
+        #     main()
         # If there is still a not found beyond the last_known_confession, it must be the end of the confessions,
         #  so try again later if there are any new confessions
+    except NoConfessionError:
+        print("{time} No confessions to post".format(time=str(datetime.now())))
+    except ConfessionNotReviewedError:
+        print("{time} Confessions waiting to be reviewed".format(time=str(datetime.now())))
     except Exception as e:
         message = "{time} [{nr}] An error occured".format(nr=confession_nr, time=str(datetime.now()))
         print(message)
-        sendmessage(message)
+        sendmessage("Confession error", message)
         raise e
+
 
 if __name__ == "__main__":
     main()
