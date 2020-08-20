@@ -7,7 +7,8 @@ from datetime import datetime
 
 
 class NotFoundError(Exception):
-    super.__init__()
+    def __str__(self):
+        return "Page not found"
 
 
 def set_confession_nr(nr):
@@ -20,7 +21,19 @@ def get_confession_nr():
         confession_nr = pickle.load(open("var.pickle", "rb"))
     except (OSError, IOError) as e:
         confession_nr = 13821  # The first pending confessions
-        set_confession_nr(confession_nr)
+
+    try:
+        accepted_dict = pickle.load(open("accepted.pickle", "rb"))
+    except (OSError, IOError):
+        raise Exception("Please run the review unit first")
+
+    try:
+        while not accepted_dict[confession_nr]:
+            confession_nr += 1  # Get the first accepted
+    except:
+        raise Exception("Already went through all reviewed items")  # todo: check if exception exists, if so send a notification
+
+    set_confession_nr(confession_nr)
     return confession_nr
 
 

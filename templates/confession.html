@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<style>
+    .buttons {
+        width: 960px;
+        margin: 0 auto;
+    }
+
+    .action_btn {
+        display: inline-block;
+        width: calc(50% - 4px);
+        margin: 0 auto;
+    }
+
+    .model-box {
+        position: relative;
+        width: 100%;
+        height: 0;
+        padding-top: 56.6%; /* This is your aspect ratio */
+    }
+
+    .model {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        width: 100%;
+        height: 100%
+    }
+</style>
+<head>
+    <meta charset="UTF-8">
+    <div class="model-box">
+        <iframe class="model" src="https://student-confessions.herokuapp.com/confession/{{nr}}" frameborder="0"
+                allowfullscreen=""></iframe>
+    </div>
+    <br>
+    <title>{{ nr }}</title>
+    <div class="buttons">
+        <button name="submit" class="action_btn submit" type="submit" value="Accept" onclick="location.href = '{{nr}}/accept';">Save</button>
+        <button name="submit" class="action_btn cancel" type="submit" value="Reject" onclick="location.href = '{{nr}}/reject';">Cancel
+        </button>
+        <p id="saved"></p>
+    </div>
+</head>
+<body>
+
+</body>
+</html>
