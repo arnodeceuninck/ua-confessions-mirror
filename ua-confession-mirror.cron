@@ -4,6 +4,6 @@
 # I didn't search how I could get this to work in a venv, so I had to install the requirements globally
 
 # run script every 45 minutes
-*/45 * * * *  python3 /home/arno/Documents/ua-confessions-mirror/main.py >>/home/arno/ua-confession-mirror-info.log 2>>/home/arno/ua-confession-mirror-error.log
+*/45 * * * * /home/arno/Documents/ua-confessions-mirror/run.sh
 # run script after system (re)boot
 #@reboot python3 /home/arno/Documents/ua-confessions-mirror/main.py >>/home/arno/ua-confession-mirror-info.log 2>>/home/arno/ua-confession-mirror-error.log
