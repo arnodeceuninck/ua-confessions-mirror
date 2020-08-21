@@ -1,15 +1,16 @@
 from selenium import webdriver
-from config import TOKEN, PAGE_ID
-import sys
+from configown import TOKEN, PAGE_ID
+import os
 import facebook
 import pickle
-from datetime import datetime
+from datetime import datetime, date
 import time
 from cookies import load_cookie
 
 import subprocess
 
 MAX_ATTEMPTS = 10
+
 
 def sendmessage(title, message):
     # print("Sending notification...")
@@ -33,13 +34,16 @@ class NoConfessionError(Exception):
     def __str__(self):
         return "No more accepted confessions, check your notifications to know whether there are still confessions to be reviewed"
 
+
 class ConfessionNotReviewedError(Exception):
     def __str__(self):
         return "There are still confessions you should review!"
 
+
 class MaxAttemptsReached(Exception):
     def __str__(self):
         return "The maximum number of attempts for getting the confession has been reached"
+
 
 def set_confession_nr(nr):
     pickle.dump(nr, open("var.pickle", "wb"))
@@ -105,10 +109,13 @@ def get_confession_nr():
         # No more accepted confessions found, check whether there are no confessions anymore
         #  (because there can still be confessions that aren't reviewed yet)
         if check_confessions_after(confession_nr):
-            sendmessage('New post after #{nr}'.format(nr=confession_nr), 'We found a post that hasn\'t been reviewed yet, please do so ASAP.')
-            print("{time} Warning: found new post, you should've received a notification about this".format(time=str(datetime.now())))
+            sendmessage('New post after #{nr}'.format(nr=confession_nr),
+                        'We found a post that hasn\'t been reviewed yet, please do so ASAP.')
+            print("{time} Warning: found new post, you should've received a notification about this".format(
+                time=str(datetime.now())))
             raise ConfessionNotReviewedError()
-        raise NoConfessionError()
+        else:
+            raise NoConfessionError()
 
     set_confession_nr(confession_nr)
     return confession_nr
@@ -174,6 +181,8 @@ def incr_confession_nr():
 def main():
     # facebook_post_selenium("Facebook doet weer moeilijk met hun GraphAPI #weodend")
     # return
+    found_confession = True
+    confession_nr = 0  # in case of crash during get_confession_nr()
     try:
         confession_nr = get_confession_nr()
         confession = get_confession(confession_nr)
@@ -199,6 +208,29 @@ def main():
         #  so try again later if there are any new confessions
     except NoConfessionError:
         print("{time} No confessions to post".format(time=str(datetime.now())))
+        #If 2 weeks NoConfessionError (with no ConfessionNotReviewedError/Notfounderror/succes in the meantime, post a reminder on Facebook)
+        found_confession = False
+
+        try:
+            days_without = pickle.load(open("days_without.pickle", "rb"))
+        except (OSError, IOError) as e:
+            days_without = set()  # The first pending confessions
+
+        days_without_len = len(days_without)
+
+        today = date.today()
+        days_without.add(today)
+
+        # To prevent posting it every time on the 7th day, check if this insertion made it from 6 a 7
+        if days_without_len == 6 and len(days_without) == 7:
+            sendmessage("No confessions", "Already went 7 days without confessions")
+        elif days_without_len == 13 and len(days_without) == 14:
+            facebook_post_selenium(
+                "Er waren geen nieuwe confessions afgelopen twee weken. Als je denkt dat dit een error is, laat het dan zeker weten.")
+            sendmessage("No confessions", "Posted a reminder that there were no confessions")
+
+        pickle.dump(days_without, open("days_without.pickle", "wb"))
+
     except ConfessionNotReviewedError:
         print("{time} Confessions waiting to be reviewed".format(time=str(datetime.now())))
     except Exception as e:
@@ -206,6 +238,9 @@ def main():
         print(message)
         sendmessage("Confession error", message)
         raise e
+
+    if found_confession and os.path.exists("days_without.pickle"):
+        os.remove("days_without.pickle")
 
 
 if __name__ == "__main__":
