@@ -1,5 +1,5 @@
 from selenium import webdriver
-from configown import TOKEN, PAGE_ID
+from config import TOKEN, PAGE_ID
 import os
 import facebook
 import pickle
@@ -181,7 +181,7 @@ def incr_confession_nr():
 def main():
     # facebook_post_selenium("Facebook doet weer moeilijk met hun GraphAPI #weodend")
     # return
-    found_confession = True
+    found_confession = True  # Will be set to False if there aren't any new confessions
     confession_nr = 0  # in case of crash during get_confession_nr()
     try:
         confession_nr = get_confession_nr()
@@ -208,7 +208,8 @@ def main():
         #  so try again later if there are any new confessions
     except NoConfessionError:
         print("{time} No confessions to post".format(time=str(datetime.now())))
-        #If 2 weeks NoConfessionError (with no ConfessionNotReviewedError/Notfounderror/succes in the meantime, post a reminder on Facebook)
+        # If 2 weeks NoConfessionError (with no ConfessionNotReviewedError/Notfounderror/succes in the meantime,
+        # post a reminder on Facebook)
         found_confession = False
 
         try:
@@ -221,13 +222,15 @@ def main():
         today = date.today()
         days_without.add(today)
 
-        # To prevent posting it every time on the 7th day, check if this insertion made it from 6 a 7
-        if days_without_len == 6 and len(days_without) == 7:
-            sendmessage("No confessions", "Already went 7 days without confessions")
-        elif days_without_len == 13 and len(days_without) == 14:
+        # To prevent posting it every time on the 14th day,
+        #  only post it when it jumped from 13 to 14 with last insertion
+        if days_without_len % 14 == 13 and len(days_without) % 14 == 0:
             facebook_post_selenium(
-                "Er waren geen nieuwe confessions afgelopen twee weken. Als je denkt dat dit een error is, laat het dan zeker weten.")
+                "Er waren geen nieuwe confessions afgelopen twee weken. "
+                "Als je denkt dat dit een error is, laat het dan zeker weten.")
             sendmessage("No confessions", "Posted a reminder that there were no confessions")
+        elif days_without_len % 7 == 6 and len(days_without) % 7 == 0:
+            sendmessage("No confessions", "Already went 7 days without confessions")
 
         pickle.dump(days_without, open("days_without.pickle", "wb"))
 
