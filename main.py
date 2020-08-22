@@ -1,5 +1,5 @@
 from selenium import webdriver
-from config import TOKEN, PAGE_ID
+# from config import TOKEN, PAGE_ID # Only relevant if using GraphAPI
 import os
 import facebook
 import pickle
@@ -12,7 +12,7 @@ import subprocess
 MAX_ATTEMPTS = 10
 
 
-def sendmessage(title, message):
+def notify(title, message):
     # print("Sending notification...")
     subprocess.Popen(['notify-send', title, message])
     # print("Done")
@@ -74,7 +74,7 @@ def get_confession(confession_nr):
     return confession
 
 
-def check_confessions_after(nr, range=51, jump_size=10):
+def check_confessions_after(nr, range=51, jump_size=1):
     confession_after = True
     try:
         get_page_driver(nr)
@@ -83,6 +83,7 @@ def check_confessions_after(nr, range=51, jump_size=10):
     if confession_after:
         return True
 
+    jump_size *= 2
     if range > jump_size:
         range = range - jump_size
         nr = nr + jump_size
@@ -109,10 +110,6 @@ def get_confession_nr():
         # No more accepted confessions found, check whether there are no confessions anymore
         #  (because there can still be confessions that aren't reviewed yet)
         if check_confessions_after(confession_nr):
-            sendmessage('New post after #{nr}'.format(nr=confession_nr),
-                        'We found a post that hasn\'t been reviewed yet, please do so ASAP.')
-            print("{time} Warning: found new post, you should've received a notification about this".format(
-                time=str(datetime.now())))
             raise ConfessionNotReviewedError()
         else:
             raise NoConfessionError()
@@ -148,27 +145,27 @@ def facebook_post_selenium(message):
     post_it.click()
     # print("Posted...")
 
-
-def facebook_post_graph_api(message):
-    try:
-        graph = facebook.GraphAPI(TOKEN)
-        graph.put_object(PAGE_ID, "feed", message=message)
-
-
-    except facebook.GraphAPIError as error:
-        against_community = "Your content couldn't be shared, because this link goes against our Community Standards"
-        if against_community in error.message:
-            # Feauture idea: Censor the part against the community standards and publish anyway
-            # confession = censor(confession, error.message)
-            # post_to_facebook(confession, confession_nr)
-            pass
-
-        # Write away the error
-        file_object = open('error.log', 'a+')  # + in case the file doesn't exists
-        file_object.write('{error} [{nr}] {text}\n'.format(nr=confession_nr, text=confession, error=error.code))
-        file_object.close()
-
-        print('{time} [{nr}] {txt}'.format(nr=confession_nr, txt=error.message, time=str(datetime.now())))
+# Posting to facebook using selenium, since the GraphAPI is currently only available for business users
+# def facebook_post_graph_api(message):
+#     try:
+#         graph = facebook.GraphAPI(TOKEN)
+#         graph.put_object(PAGE_ID, "feed", message=message)
+#
+#
+#     except facebook.GraphAPIError as error:
+#         against_community = "Your content couldn't be shared, because this link goes against our Community Standards"
+#         if against_community in error.message:
+#             # Feauture idea: Censor the part against the community standards and publish anyway
+#             # confession = censor(confession, error.message)
+#             # post_to_facebook(confession, confession_nr)
+#             pass
+#
+#         # Write away the error
+#         file_object = open('error.log', 'a+')  # + in case the file doesn't exists
+#         file_object.write('{error} [{nr}] {text}\n'.format(nr=confession_nr, text=confession, error=error.code))
+#         file_object.close()
+#
+#         print('{time} [{nr}] {txt}'.format(nr=confession_nr, txt=error.message, time=str(datetime.now())))
 
 
 def incr_confession_nr():
@@ -182,6 +179,7 @@ def main():
     # facebook_post_selenium("Facebook doet weer moeilijk met hun GraphAPI #weodend")
     # return
     found_confession = True  # Will be set to False if there aren't any new confessions
+    reviewed = True
     confession_nr = 0  # in case of crash during get_confession_nr()
     try:
         confession_nr = get_confession_nr()
@@ -196,7 +194,7 @@ def main():
             MAX_ATTEMPTS -= 1
             main()  # All accepted confessions should exist
         else:
-            sendmessage("Max attempts reached", "Max attempts reached for confession #{nr}".format(nr=confession_nr))
+            notify("Max attempts reached", "Max attempts reached for confession #{nr}".format(nr=confession_nr))
             raise MaxAttemptsReached()
         # return
         # last_known_confession = 14098
@@ -226,24 +224,57 @@ def main():
         #  only post it when it jumped from 13 to 14 with last insertion
         if days_without_len % 14 == 13 and len(days_without) % 14 == 0:
             facebook_post_selenium(
-                "Er waren geen nieuwe confessions afgelopen twee weken. "
+                "Er waren geen nieuwe confessions afgelopen twee weken. \n"
+                "Iedereen heeft wel confessions die hij/zij kwijt wil. "
+                "Geef ze door via https://www.facebook.com/UAntwerpenConfessions/app/208195102528120. "
+                "The truth will set you free.\n"
                 "Als je denkt dat dit een error is, laat het dan zeker weten.")
-            sendmessage("No confessions", "Posted a reminder that there were no confessions")
+            notify("No confessions", "Posted a reminder that there were no confessions")
         elif days_without_len % 7 == 6 and len(days_without) % 7 == 0:
-            sendmessage("No confessions", "Already went 7 days without confessions")
+            notify("No confessions", "Already went 7 days without confessions")
 
         pickle.dump(days_without, open("days_without.pickle", "wb"))
 
     except ConfessionNotReviewedError:
-        print("{time} Confessions waiting to be reviewed".format(time=str(datetime.now())))
+        reviewed = False
+
+        # Let now there are still questions to be reviewed
+        notify('New post after #{nr}'.format(nr=confession_nr),
+                    'We found a post that hasn\'t been reviewed yet, please do so ASAP.')
+        print(
+            "{time} Warning: found new post waiting to be reviewed, you should've received a notification about this".format(
+                time=str(datetime.now())))
+
+        # Give a warning when this is multiple days the case
+        try:
+            days_without = pickle.load(open("days_without_review.pickle", "rb"))
+        except (OSError, IOError) as e:
+            days_without = set()  # The first pending confessions
+
+        days_without_len = len(days_without)
+
+        today = date.today()
+        days_without.add(today)
+
+        if days_without_len == 6 and len(days_without) == 7:
+            facebook_post_selenium(
+                "Er zijn ondertussen wel nog confessions ingediend, maar de admin heeft deze niet meer gecontroleerd. "
+                "Indien je dit leest, kan je best even horen bij hem of alles nog oke is.")
+            notify("No confessions reviewed", "Bro, are you alive? There are still confessions waiting to be reviewed")
+        elif days_without_len % 7 == 4 and len(days_without) % 7 == 5:
+            notify("Review confessions (or I'll post a warning)", "There are still confessions waiting to be reviewed!")
+
+        pickle.dump(days_without, open("days_without_review.pickle", "wb"))
     except Exception as e:
         message = "{time} [{nr}] An error occured".format(nr=confession_nr, time=str(datetime.now()))
         print(message)
-        sendmessage("Confession error", message)
+        notify("Confession error", message)
         raise e
 
     if found_confession and os.path.exists("days_without.pickle"):
         os.remove("days_without.pickle")
+    if reviewed and os.path.exists("days_without_review.pickle"):
+        os.remove("days_without_review.pickle")
 
 
 if __name__ == "__main__":
