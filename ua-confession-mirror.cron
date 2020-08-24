@@ -1,9 +1,9 @@
-# src: https://stackoverflow.com/questions/21648410/write-python-script-that-is-executed-every-5-minutes
-# Change arno to your username, the path to main.py to your absolute path to the main.py file
-# This two lines should be added when doing "crontab -e" in a terminal
+# Change the path to run.sh to your absolute path to the run.sh file
+# This lines should be added when doing "crontab -e" in a terminal
 # I didn't search how I could get this to work in a venv, so I had to install the requirements globally
+#  Update: if you want you can activate the venv in run.sh, so you don't have to install the requirements globally
 
-# run script every 45 minutes
-*/45 * * * * /home/arno/Documents/ua-confessions-mirror/run.sh
-# run script after system (re)boot
-#@reboot python3 /home/arno/Documents/ua-confessions-mirror/main.py >>/home/arno/ua-confession-mirror-info.log 2>>/home/arno/ua-confession-mirror-error.log
+# run script every 60 minutes
+*/60 * * * * /home/arno/Documents/ua-confessions-mirror/run.sh
+
+# I haven't found an easy way to debug this, currently I set it to run every minute when debugging

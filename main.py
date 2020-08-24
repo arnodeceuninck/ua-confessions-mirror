@@ -1,5 +1,5 @@
 from selenium import webdriver
-# from config import TOKEN, PAGE_ID # Only relevant if using GraphAPI
+
 import os
 import facebook
 import pickle
@@ -9,47 +9,69 @@ from cookies import load_cookie
 
 import subprocess
 
+GRAPH_API = False  # Set to True if using graph api
+
+if GRAPH_API:
+    from config import TOKEN, PAGE_ID  # Only relevant if using GraphAPI
+
 MAX_ATTEMPTS = 10
 
 
-def notify(title, message):
-    # print("Sending notification...")
-    subprocess.Popen(['notify-send', title, message])
-    # print("Done")
-    return
+def timestr():
+    # Timestring to use in log
+    return str(datetime.now())
 
-    # problem with dbus
-    # import notify2
-    # notify2.init('ua-confession-mirror')
-    # n = notify2.Notification('New post #{nr}', 'We found a post that hasn\'t been reviewed yet, please do so ASAP.')
-    # n.show()
+
+def load_pickle(name, default):
+    try:
+        var = pickle.load(open(name, "rb"))
+    except (OSError, IOError):
+        var = default
+    return var
+
+
+def store_pickle(name, var):
+    pickle.dump(var, open(name, "wb"))
+
+
+def notify(title, message):
+    # Send a notification in ubuntu
+    # Using the python notify2 module would be better, but dbus gives a problem
+    subprocess.Popen(['notify-send', title, message])
+    return
 
 
 class NotFoundError(Exception):
+    # Error you get when you load the page for a confession and get a not found back
     def __str__(self):
         return "Page not found"
 
 
 class NoConfessionError(Exception):
+    # Error when there were no confessions found to post
     def __str__(self):
         return "No more accepted confessions, check your notifications to know whether there are still confessions to be reviewed"
 
 
 class ConfessionNotReviewedError(Exception):
+    # Error when there are still confessions that have to be reviewed
     def __str__(self):
         return "There are still confessions you should review!"
 
 
 class MaxAttemptsReached(Exception):
+    # Error when the max nr of attempts has been reached
     def __str__(self):
         return "The maximum number of attempts for getting the confession has been reached"
 
 
 def set_confession_nr(nr):
+    # Update the last posted confession number
     pickle.dump(nr, open("var.pickle", "wb"))
 
 
 def get_page_driver(confession_nr):
+    # Get the selenium page driver for the given confession number
     url = "https://student-confessions.herokuapp.com/confession/{nr}"
 
     # Selenium configuration
@@ -58,7 +80,7 @@ def get_page_driver(confession_nr):
     driver = webdriver.Firefox(options=opts)
 
     # Load the page
-    rvalue = driver.get(url.format(nr=confession_nr))
+    driver.get(url.format(nr=confession_nr))
 
     if driver.title == "404 Not Found":
         raise NotFoundError()
@@ -67,22 +89,26 @@ def get_page_driver(confession_nr):
 
 
 def get_confession(confession_nr):
-    driver = get_page_driver(confession_nr)
-    # Get the confession from the page
+    # Given a confession number, get the text of the confession from the website
+    driver = get_page_driver(confession_nr)  # Get the page
     element = driver.find_element_by_tag_name('p')  # The confession is the only paragraph on the page
     confession = element.text
     return confession
 
 
 def check_confessions_after(nr, range=51, jump_size=1):
-    confession_after = True
+    # Check whether there are still confessions from (and after) a given number
+    # It test a few pages (inside the range) whether they all give a 404 (and thus there are no confessions)
+    # Required because you've got sometimes random 404 between confessions
     try:
         get_page_driver(nr)
     except NotFoundError:
-        confession_after = False
-    if confession_after:
+        pass
+    else:
+        # We found a confession
         return True
 
+    # Make bigger jumps to prevent testing each page in the range (but still prioritize the first ones more)
     jump_size *= 2
     if range > jump_size:
         range = range - jump_size
@@ -92,17 +118,17 @@ def check_confessions_after(nr, range=51, jump_size=1):
 
 
 def get_confession_nr():
-    # Load the confession nr
-    try:
-        confession_nr = pickle.load(open("var.pickle", "rb"))
-    except (OSError, IOError) as e:
-        confession_nr = 13821  # The first pending confessions
+    # Get the number of the next confession to post
 
-    try:
-        accepted_dict = pickle.load(open("accepted.pickle", "rb"))
-    except (OSError, IOError):
+    # Load the number
+    confession_nr = load_pickle("var.pickle", default=13821)  # The first confession as default
+
+    # Load the dict containing which confessions are accepted/rejected
+    accepted_dict = load_pickle("accepted.pickle", default=None)
+    if accepted_dict is None:
         raise Exception("Please run the review unit first")
 
+    # Find the first confession that has been accepted
     try:
         while not accepted_dict[confession_nr]:
             confession_nr += 1  # Get the first accepted
@@ -114,163 +140,180 @@ def get_confession_nr():
         else:
             raise NoConfessionError()
 
+    # Remember the new number
     set_confession_nr(confession_nr)
     return confession_nr
 
 
-def post_to_facebook(confession, confession_nr):
+def post_to_facebook(text):
+    # Post text to facebook
+    if GRAPH_API:
+        facebook_post_graph_api(text)
+    else:
+        facebook_post_selenium(text)
+
+
+def post_confession(confession, confession_nr):
     # Make a Facebook post
-    text = "#{nr} {text}".format(nr=confession_nr, text=confession)
-    facebook_post_selenium(text)
-    # facebook_post_graph_api(text)
+    text = f"#{confession_nr} {confession}"
+    post_to_facebook(text)
 
 
 def facebook_post_selenium(message):
+    # Post a message on Facebook using selenium
+    # Warning: This requires your login to be completed
     opts = webdriver.FirefoxOptions()
     opts.headless = True
     driver = webdriver.Firefox(options=opts)
-    driver.get('https://mbasic.facebook.com/')
-    load_cookie(driver, 'cookie.pickle')
+
+    # Login
+    driver.get('https://mbasic.facebook.com/')  # You can only set cookies at the page you're at, so go to facebook
+    load_cookie(driver, 'cookie.pickle')  # Set the session cookies
+
     driver.get('https://mbasic.facebook.com/UAntwerpen-Confessions-Mirror-114029007083594/')
-    # print("Page loaded...")
+
+    # Click on the post box, to enter text
     post_box = driver.find_element_by_id("u_0_0")
-    # post_box = driver.find_element_by_xpath('//textarea[@placeholder="What\'s on your mind?"')
     post_box.click()
-    # print("Clicked on post textbox...")
     time.sleep(3)
+
+    # Type the message
     post_box.send_keys(message)
     time.sleep(2)
+
+    # Post it
     post_it = driver.find_element_by_name("view_post")
-    # post_it = driver.find_element_by_xpath("//input[@value=\"Post\"")
     post_it.click()
-    # print("Posted...")
+
 
 # Posting to facebook using selenium, since the GraphAPI is currently only available for business users
-# def facebook_post_graph_api(message):
-#     try:
-#         graph = facebook.GraphAPI(TOKEN)
-#         graph.put_object(PAGE_ID, "feed", message=message)
-#
-#
-#     except facebook.GraphAPIError as error:
-#         against_community = "Your content couldn't be shared, because this link goes against our Community Standards"
-#         if against_community in error.message:
-#             # Feauture idea: Censor the part against the community standards and publish anyway
-#             # confession = censor(confession, error.message)
-#             # post_to_facebook(confession, confession_nr)
-#             pass
-#
-#         # Write away the error
-#         file_object = open('error.log', 'a+')  # + in case the file doesn't exists
-#         file_object.write('{error} [{nr}] {text}\n'.format(nr=confession_nr, text=confession, error=error.code))
-#         file_object.close()
-#
-#         print('{time} [{nr}] {txt}'.format(nr=confession_nr, txt=error.message, time=str(datetime.now())))
+def facebook_post_graph_api(message):
+    # Post a message on Facebook using the Graph API
+    # Warning: This requires you to enter your page id and token in config.py
+    # Your token should be in live (if you want post to show up live) with permission to write text to the page
+    # This is currently only available for business users (don't know why, Facebook just being weird)
+
+    try:
+        # Post it
+        graph = facebook.GraphAPI(TOKEN)
+        graph.put_object(PAGE_ID, "feed", message=message)
+    except facebook.GraphAPIError as error:
+        # An error happened while posting
+
+        # Guidlines violation error
+        against_community = "Your content couldn't be shared, because this link goes against our Community Standards"
+        if against_community in error.message:
+            # Feauture idea: Censor the part against the community standards and publish anyway
+            # confession = censor(confession, error.message)
+            # post_confession(confession, confession_nr)
+            pass
+
+        # Write away the error
+        file_object = open('error.log', 'a+')  # + in case the file doesn't exists
+        file_object.write(f'{datetime.now()} Error {error.code}: {error.message} ({message})\n')
+        file_object.close()
+
+        notify("Error", "An error has occured when posting using GraphAPI, please check the log")
 
 
 def incr_confession_nr():
+    # Increase and save the confession number to start from next time
     confession_nr = get_confession_nr()
-    # Save the confession number and come back later
     confession_nr += 1
     pickle.dump(confession_nr, open("var.pickle", "wb"))
 
 
+def add_days_passed(pickle_name):
+    days_without = load_pickle(pickle_name, set())
+    days_without_len = len(days_without)  # used for jump
+
+    today = date.today()
+    days_without.add(today)
+
+    days_passed = len(days_without)
+    # prevent doing something every time this script is ran on a given day
+    jump = days_without_len != days_passed  # True if this addition made the number of days change
+
+    store_pickle(pickle_name, days_passed)
+
+    return days_passed, jump
+
+
 def main():
-    # facebook_post_selenium("Facebook doet weer moeilijk met hun GraphAPI #weodend")
-    # return
     found_confession = True  # Will be set to False if there aren't any new confessions
-    reviewed = True
+    reviewed = True  # Will be set to False if there are confessions still waiting to be reviewed
+
     confession_nr = 0  # in case of crash during get_confession_nr()
+
     try:
+        # Get the confession and post it to Facebook
         confession_nr = get_confession_nr()
         confession = get_confession(confession_nr)
-        post_to_facebook(confession, confession_nr)
+        post_confession(confession, confession_nr)
         incr_confession_nr()
-        print("{time} Confession {nr} posted successfully".format(nr=confession_nr, time=str(datetime.now())))
+        notify("Posted confession", confession)
+        print(f"{timestr()} Confession {confession_nr} posted successfully")
+
     except NotFoundError:
-        print("{time} [{nr}] Page Not Found".format(nr=confession_nr, time=str(datetime.now())))
+        # The confession was accepted, so it must exist, but was not found, so try again
+        print(f"{timestr()} [{confession_nr}] Page Not Found")
         global MAX_ATTEMPTS
         if MAX_ATTEMPTS:
             MAX_ATTEMPTS -= 1
             main()  # All accepted confessions should exist
         else:
-            notify("Max attempts reached", "Max attempts reached for confession #{nr}".format(nr=confession_nr))
+            notify("Max attempts reached", f"Max attempts reached for confession #{confession_nr}")
             raise MaxAttemptsReached()
-        # return
-        # last_known_confession = 14098
-        # if confession_nr < last_known_confession:
-        #     # There are still confessions, try to find the next one
-        #     incr_confession_nr()
-        #     main()
-        # If there is still a not found beyond the last_known_confession, it must be the end of the confessions,
-        #  so try again later if there are any new confessions
+
     except NoConfessionError:
         print("{time} No confessions to post".format(time=str(datetime.now())))
-        # If 2 weeks NoConfessionError (with no ConfessionNotReviewedError/Notfounderror/succes in the meantime,
-        # post a reminder on Facebook)
-        found_confession = False
 
-        try:
-            days_without = pickle.load(open("days_without.pickle", "rb"))
-        except (OSError, IOError) as e:
-            days_without = set()  # The first pending confessions
+        # If 2 weeks no new confessions post a reminder on Facebook
+        found_confession = False  # Don't reset the day counter
 
-        days_without_len = len(days_without)
+        days, jump = add_days_passed("days_without.pickle")
 
-        today = date.today()
-        days_without.add(today)
-
-        # To prevent posting it every time on the 14th day,
-        #  only post it when it jumped from 13 to 14 with last insertion
-        if days_without_len % 14 == 13 and len(days_without) % 14 == 0:
-            facebook_post_selenium(
-                "Er waren geen nieuwe confessions afgelopen twee weken. \n"
-                "Iedereen heeft wel confessions die hij/zij kwijt wil. "
-                "Geef ze door via https://www.facebook.com/UAntwerpenConfessions/app/208195102528120. "
-                "The truth will set you free.\n"
-                "Als je denkt dat dit een error is, laat het dan zeker weten.")
+        if days % 14 == 0 and jump:
+            post = "Er waren geen nieuwe confessions afgelopen twee weken. \n" \
+                   "Iedereen heeft wel confessions die hij/zij kwijt wil. " \
+                   "Geef ze door via https://www.facebook.com/UAntwerpenConfessions/app/208195102528120. " \
+                   "The truth will set you free.\n" \
+                   "Als je denkt dat dit een error is, laat het dan zeker weten."
+            facebook_post_selenium(post)
             notify("No confessions", "Posted a reminder that there were no confessions")
-        elif days_without_len % 7 == 6 and len(days_without) % 7 == 0:
+
+        elif days % 7 == 0 and jump:
             notify("No confessions", "Already went 7 days without confessions")
 
-        pickle.dump(days_without, open("days_without.pickle", "wb"))
-
     except ConfessionNotReviewedError:
-        reviewed = False
+        reviewed = False  # Don't reset day counter
 
         # Let now there are still questions to be reviewed
-        notify('New post after #{nr}'.format(nr=confession_nr),
-                    'We found a post that hasn\'t been reviewed yet, please do so ASAP.')
-        print(
-            "{time} Warning: found new post waiting to be reviewed, you should've received a notification about this".format(
-                time=str(datetime.now())))
+        notify(f'New post after #{confession_nr}',
+               'We found a post that hasn\'t been reviewed yet, please do so ASAP.')
 
-        # Give a warning when this is multiple days the case
-        try:
-            days_without = pickle.load(open("days_without_review.pickle", "rb"))
-        except (OSError, IOError) as e:
-            days_without = set()  # The first pending confessions
+        print(f"{timestr()} Warning: found new post waiting to be reviewed, "
+              f"you should've received a notification about this")
 
-        days_without_len = len(days_without)
+        days, jump = add_days_passed("days_without_review.pickle")
 
-        today = date.today()
-        days_without.add(today)
-
-        if days_without_len == 6 and len(days_without) == 7:
-            facebook_post_selenium(
-                "Er zijn ondertussen wel nog confessions ingediend, maar de admin heeft deze niet meer gecontroleerd. "
-                "Indien je dit leest, kan je best even horen bij hem of alles nog oke is.")
+        if days == 7 and jump:
+            post = "Er zijn ondertussen wel nog confessions ingediend, " \
+                   "maar de admin heeft deze niet meer gecontroleerd. " \
+                   "Indien je dit leest, kan je best even horen bij hem of alles nog oke is."
+            facebook_post_selenium(post)
             notify("No confessions reviewed", "Bro, are you alive? There are still confessions waiting to be reviewed")
-        elif days_without_len % 7 == 4 and len(days_without) % 7 == 5:
+
+        elif days == 4 and jump:
             notify("Review confessions (or I'll post a warning)", "There are still confessions waiting to be reviewed!")
 
-        pickle.dump(days_without, open("days_without_review.pickle", "wb"))
     except Exception as e:
         message = "{time} [{nr}] An error occured".format(nr=confession_nr, time=str(datetime.now()))
         print(message)
         notify("Confession error", message)
         raise e
 
+    # Stop the streaks without if necessarily
     if found_confession and os.path.exists("days_without.pickle"):
         os.remove("days_without.pickle")
     if reviewed and os.path.exists("days_without_review.pickle"):

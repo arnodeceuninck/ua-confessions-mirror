@@ -1,27 +1,35 @@
 from flask import Flask, url_for, redirect, render_template
 import pickle
+from main import load_pickle, store_pickle
+
+# A user interface to accept/reject submitted confessions
 
 app = Flask(__name__, template_folder='templates')
 
-try:
-    accepted_dict = pickle.load(open("accepted.pickle", "rb"))
-    next_review = pickle.load(open("next_review.pickle", "rb"))
-except (OSError, IOError) as e:
-    accepted_dict = dict()  # num:true if accepted
-    next_review = 13821 # one before the first unaccepted
+accepted_dict = load_pickle("accepted.pickle", dict())
+next_review = load_pickle("next_review.pickle", 13821)
+
 
 def set_status(nr, accepted):
+    # Set a given confession number to accepted or rejected
     global next_review
+
     accepted_dict[nr] = accepted
-    pickle.dump(accepted_dict, open("accepted.pickle", "wb"))
+    store_pickle("accepted.pickle", accepted_dict)
+
     next_review += 1
-    pickle.dump(next_review, open("next_review.pickle", "wb"))
+    store_pickle("next_review.pickle", next_review)
 
 
 @app.route('/')
 def main():
     global next_review
-    return render_template("confession.html", nr=next_review)
+    return redirect(url_for('confession', id=next_review))
+
+
+@app.route('/<int:id>')
+def confession(id):
+    return render_template("confession.html", nr=id)
 
 
 @app.route('/<int:id>/accept')
@@ -34,6 +42,7 @@ def accept(id):
 def reject(id):
     set_status(id, False)
     return redirect(url_for('main'))
+
 
 if __name__ == '__main__':
     app.debug = True
