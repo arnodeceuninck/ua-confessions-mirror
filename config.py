@@ -6,3 +6,9 @@
 TOKEN = "INSERT_HERE_YOUR_FACEBOOK_PAGE_TOKEN"
 # Page ID can be found at the bottom of the about section of your page
 PAGE_ID = "INSERT_HERE_YOUR_PAGE_ID"
+
+# For sending messenger messages, you have to provide your username and password
+# Note: It's not recommended to use your main account for this
+# Sending messages too often, might get you banned from facebook
+USERNAME = "INSERT_HERE_YOUR_FACEBOOK_USERNAME"
+PASSWORD = "INSERT_HERE_YOUR_FACEBOOK_PASSWORD"
