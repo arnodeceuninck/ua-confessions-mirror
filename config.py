@@ -12,3 +12,6 @@ PAGE_ID = "INSERT_HERE_YOUR_PAGE_ID"
 # Sending messages too often, might get you banned from facebook
 USERNAME = "INSERT_HERE_YOUR_FACEBOOK_USERNAME"
 PASSWORD = "INSERT_HERE_YOUR_FACEBOOK_PASSWORD"
+
+# For accessing the confessions API
+BEARER_TOKEN = "INSERT_HERE_YOUR_BEARER_YWT_TOKEN"

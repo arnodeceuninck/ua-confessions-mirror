@@ -1,5 +1,6 @@
 from flask import Flask, url_for, redirect, render_template
 import pickle
+from confessions import handle_response
 from main import load_pickle, store_pickle
 
 # A user interface to accept/reject submitted confessions
@@ -42,6 +43,17 @@ def accept(id):
 def reject(id):
     set_status(id, False)
     return redirect(url_for('main'))
+
+
+# Routes for the API review unit
+@app.route('/api/<int:id>/accept')
+def accept_api(id):
+    return handle_response(id, True)
+
+
+@app.route('/api/<int:id>/reject')
+def reject_api(id):
+    return handle_response(id, False)
 
 
 if __name__ == '__main__':
