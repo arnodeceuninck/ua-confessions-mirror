@@ -234,7 +234,7 @@ def add_days_passed(pickle_name):
     # prevent doing something every time this script is ran on a given day
     jump = days_without_len != days_passed  # True if this addition made the number of days change
 
-    store_pickle(pickle_name, days_passed)
+    store_pickle(pickle_name, days_without)
 
     return days_passed, jump
 

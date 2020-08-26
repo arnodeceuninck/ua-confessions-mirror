@@ -1,5 +1,6 @@
 # A script to run using a cronjob
 # Set the right working environment
+# exit # Temporarily stop executing
 cd /home/arno/Documents/ua-confessions-mirror
 PATH=$PATH:/usr/local/bin:/usr/local/bin/geckodriver:/usr/bin/notify-send
 
