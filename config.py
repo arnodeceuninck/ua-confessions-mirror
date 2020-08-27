@@ -15,3 +15,6 @@ PASSWORD = "INSERT_HERE_YOUR_FACEBOOK_PASSWORD"
 
 # For accessing the confessions API
 BEARER_TOKEN = "INSERT_HERE_YOUR_BEARER_YWT_TOKEN"
+
+USERNAME = "dispatchade@outlook.com"
+PASSWORD = "v0hwnmEG4eUrA7B3"

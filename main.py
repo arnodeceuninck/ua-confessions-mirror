@@ -3,7 +3,7 @@ from selenium import webdriver
 import os
 import facebook
 import pickle
-from datetime import datetime, date
+from datetime import datetime, date, time
 import time
 from cookies import load_cookie
 
@@ -239,6 +239,29 @@ def add_days_passed(pickle_name):
     return days_passed, jump
 
 
+def is_time_between(begin_time, end_time, check_time=None):
+    # If check time is not given, default to current UTC time
+    check_time = check_time or datetime.utcnow().time()
+    if begin_time < end_time:
+        return begin_time <= check_time <= end_time
+    else:  # crosses midnight
+        return check_time >= begin_time or check_time <= end_time
+
+
+def peak_hour():
+    return is_time_between(time(16, 30), time(21, 30))
+
+
+def done_today():
+    store_pickle("last_day.pickle", date.today())
+
+
+def already_done_today():
+    today = date.today()
+    last_day = load_pickle("last_day.pickle", None)
+    return today == last_day
+
+
 def main():
     found_confession = True  # Will be set to False if there aren't any new confessions
     reviewed = True  # Will be set to False if there are confessions still waiting to be reviewed
@@ -247,10 +270,14 @@ def main():
 
     try:
         # Get the confession and post it to Facebook
-        confession_nr = get_confession_nr()
+        confession_nr = get_confession_nr()  # Also checks new confessions to be reviewed, do this every time
+        # Post a confession only once a day:
+        if already_done_today() or not peak_hour():
+            return
         confession = get_confession(confession_nr)
         post_confession(confession, confession_nr)
         incr_confession_nr()
+        done_today()
         notify("Posted confession", confession)
         print(f"{timestr()} Confession {confession_nr} posted successfully")
 
@@ -272,6 +299,17 @@ def main():
         found_confession = False  # Don't reset the day counter
 
         days, jump = add_days_passed("days_without.pickle")
+
+        if days == 3 and jump:
+            post = "Er waren geen nieuwe confessions afgelopen twee dagen. \n" \
+                   "Iedereen heeft wel confessions die hij/zij kwijt wil. " \
+                   "Geef ze door via https://www.facebook.com/UAntwerpenConfessions/app/208195102528120. " \
+                   "The truth will set you free.\n" \
+                   "Als je denkt dat dit een error is, laat het dan zeker weten."
+            facebook_post_selenium(post)
+            notify("No confessions", "Posted a reminder that there were no confessions")
+        elif days == 2 and jump:
+            notify("No confessions", "Morgen post ik een reminder")
 
         if days % 14 == 0 and jump:
             post = "Er waren geen nieuwe confessions afgelopen twee weken. \n" \
