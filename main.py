@@ -4,7 +4,7 @@ import os
 import facebook
 import pickle
 from datetime import datetime, date, time
-import time
+from time import sleep
 from cookies import load_cookie
 
 import subprocess
@@ -175,11 +175,11 @@ def facebook_post_selenium(message):
     # Click on the post box, to enter text
     post_box = driver.find_element_by_id("u_0_0")
     post_box.click()
-    time.sleep(3)
+    sleep(3)
 
     # Type the message
     post_box.send_keys(message)
-    time.sleep(2)
+    sleep(2)
 
     # Post it
     post_it = driver.find_element_by_name("view_post")
@@ -299,17 +299,6 @@ def main():
         found_confession = False  # Don't reset the day counter
 
         days, jump = add_days_passed("days_without.pickle")
-
-        if days == 3 and jump:
-            post = "Er waren geen nieuwe confessions afgelopen twee dagen. \n" \
-                   "Iedereen heeft wel confessions die hij/zij kwijt wil. " \
-                   "Geef ze door via https://www.facebook.com/UAntwerpenConfessions/app/208195102528120. " \
-                   "The truth will set you free.\n" \
-                   "Als je denkt dat dit een error is, laat het dan zeker weten."
-            facebook_post_selenium(post)
-            notify("No confessions", "Posted a reminder that there were no confessions")
-        elif days == 2 and jump:
-            notify("No confessions", "Morgen post ik een reminder")
 
         if days % 14 == 0 and jump:
             post = "Er waren geen nieuwe confessions afgelopen twee weken. \n" \
