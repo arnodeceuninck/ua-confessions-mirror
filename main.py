@@ -241,7 +241,7 @@ def add_days_passed(pickle_name):
 
 def is_time_between(begin_time, end_time, check_time=None):
     # If check time is not given, default to current UTC time
-    check_time = check_time or datetime.utcnow().time()
+    check_time = check_time or datetime.now().time()
     if begin_time < end_time:
         return begin_time <= check_time <= end_time
     else:  # crosses midnight
@@ -273,6 +273,7 @@ def main():
         confession_nr = get_confession_nr()  # Also checks new confessions to be reviewed, do this every time
         # Post a confession only once a day:
         if already_done_today() or not peak_hour():
+            print(f"{timestr()} Skipped because it's not a peak hour or already posted a confession today")
             return
         confession = get_confession(confession_nr)
         post_confession(confession, confession_nr)
